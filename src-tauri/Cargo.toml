@@ -1,6 +1,6 @@
 [package]
 name = "SkyLauncher"
-version = "1.0.0"
+version = "1.1.1"
 description = "SkyLauncher — Modern, Fast & Modular Minecraft Launcher"
 authors = ["SkyLauncher"]
 edition = "2021"

@@ -185,10 +185,15 @@ export const Settings: React.FC<SettingsProps> = ({
             />
           </div>
 
-          {/* CurseForge Directory */}
+          {/* CurseForge Directory (Optional) */}
           <div className="space-y-1.5 pt-2 border-t border-border-subtle">
             <label className="block text-xs font-medium text-text-secondary">
-              {t.cfWatcherSection}
+              {t.cfWatcherSection}{" "}
+              <span className="text-[11px] text-text-muted font-normal">
+                {language === "tr"
+                  ? "(İsteğe Bağlı — CurseForge yüklü değilse boş bırakabilirsiniz)"
+                  : "(Optional — leave blank if CurseForge is not installed)"}
+              </span>
             </label>
             <input
               type="text"
@@ -305,33 +310,26 @@ export const Settings: React.FC<SettingsProps> = ({
   );
 };
 
+const OFFICIAL_GITHUB_REPO = "Skynzz/SkyLauncher";
+
 const GitHubUpdaterCard: React.FC<{
   globalSettings: GlobalSettings;
   setGlobalSettings: React.Dispatch<React.SetStateAction<GlobalSettings>>;
   language: Language;
-}> = ({ globalSettings, setGlobalSettings, language }) => {
+}> = ({ language }) => {
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [statusText, setStatusText] = useState<string | null>(null);
 
-  const repoValue = globalSettings.githubUpdateRepo || "Sky_o/SkyLauncher";
-
   const handleCheckUpdate = async () => {
     setChecking(true);
     setErrorText(null);
     setStatusText(null);
     try {
-      // Save repo setting first
-      await invoke("save_global_settings", {
-        settings: {
-          ...globalSettings,
-          githubUpdateRepo: repoValue,
-        },
-      });
       const res = await invoke<UpdateCheckResult>("check_app_update_cmd", {
-        customRepo: repoValue,
+        customRepo: OFFICIAL_GITHUB_REPO,
       });
       setUpdateInfo(res);
       if (!res.updateAvailable) {
@@ -371,28 +369,22 @@ const GitHubUpdaterCard: React.FC<{
           <Sparkles className="w-4 h-4 text-accent-primary" />
           <h3 className="text-xs font-bold text-text-primary">
             {language === "tr"
-              ? "Uygulama Güncellemeleri (GitHub OTA)"
-              : "Launcher Updates (GitHub OTA)"}
+              ? "Uygulama Güncellemeleri (Resmi Kanal)"
+              : "Launcher Updates (Official Channel)"}
           </h3>
         </div>
         <span className="px-2 py-0.5 rounded-md bg-bg-elevated text-[10px] font-mono text-text-secondary">
-          v{updateInfo?.currentVersion || "0.1.0"}
+          v{updateInfo?.currentVersion || "1.1.1"}
         </span>
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={repoValue}
-          onChange={(e) =>
-            setGlobalSettings({
-              ...globalSettings,
-              githubUpdateRepo: e.target.value,
-            })
-          }
-          placeholder="kullanici/SkyLauncher veya version.json URL"
-          className="flex-1 px-3 py-2 rounded-xl bg-bg-secondary border border-border-subtle text-xs text-text-primary focus:outline-none focus:border-accent-primary"
-        />
+      <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-bg-secondary border border-border-subtle">
+        <div className="text-xs text-text-secondary truncate">
+          {language === "tr" ? "Güncelleme Sunucusu:" : "Update Server:"}{" "}
+          <span className="font-mono font-semibold text-text-primary">
+            {OFFICIAL_GITHUB_REPO}
+          </span>
+        </div>
         <button
           type="button"
           disabled={checking || installing}
@@ -416,8 +408,8 @@ const GitHubUpdaterCard: React.FC<{
 
       <p className="text-[11px] text-text-muted leading-relaxed">
         {language === "tr"
-          ? "GitHub Releases (/releases/latest) veya doğrudan version.json bağlantısı üzerinden yeni SkyLauncher.exe sürümünü kontrol eder ve tek tıkla indirip günceller."
-          : "Checks GitHub Releases (/releases/latest) or a raw version.json endpoint and hot-swaps SkyLauncher.exe in one click."}
+          ? "Resmi Skynzz/SkyLauncher deposu üzerinden yeni sürümü kontrol eder ve tek tıkla indirip günceller."
+          : "Automatically checks the official Skynzz/SkyLauncher repository and updates SkyLauncher in one click."}
       </p>
 
       {errorText && (

@@ -222,13 +222,15 @@ export const InstanceGrid: React.FC<InstanceGridProps> = ({
               <span>{t.importOrShareBtn}</span>
             </button>
 
-            <button
-              onClick={handleRescanCurseForge}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-bg-card hover:bg-bg-elevated border border-border-subtle text-xs font-medium text-text-secondary hover:text-text-primary transition"
-            >
-              <FolderSync className="w-4 h-4" />
-              <span>{t.rescanCurseForge}</span>
-            </button>
+            {globalSettings.curseforgeInstancesDir && (
+              <button
+                onClick={handleRescanCurseForge}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-bg-card hover:bg-bg-elevated border border-border-subtle text-xs font-medium text-text-secondary hover:text-text-primary transition"
+              >
+                <FolderSync className="w-4 h-4" />
+                <span>{t.rescanCurseForge}</span>
+              </button>
+            )}
 
             <button
               onClick={onNavigateDownloader}

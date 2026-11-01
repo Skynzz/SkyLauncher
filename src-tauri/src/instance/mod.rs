@@ -35,8 +35,10 @@ pub struct GlobalSettings {
     pub github_update_repo: String,
 }
 
+pub const OFFICIAL_GITHUB_REPO: &str = "Skynzz/SkyLauncher";
+
 fn default_github_repo() -> String {
-    "Sky_o/SkyLauncher".to_string()
+    OFFICIAL_GITHUB_REPO.to_string()
 }
 
 impl Default for GlobalSettings {
@@ -130,11 +132,31 @@ impl InstanceManager {
             return Ok(GlobalSettings::default());
         }
         let raw = fs::read_to_string(&self.settings_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&raw).map_err(|e| e.to_string())
+        let mut settings: GlobalSettings =
+            serde_json::from_str(&raw).unwrap_or_else(|_| GlobalSettings::default());
+
+        // Always lock the update repository to the official Skynzz/SkyLauncher repo
+        settings.github_update_repo = OFFICIAL_GITHUB_REPO.to_string();
+
+        // If CurseForge is not installed or the configured folder doesn't exist, gracefully clear it
+        if let Some(ref cf_dir) = settings.curseforge_instances_dir {
+            if cf_dir.trim().is_empty() || !Path::new(cf_dir).exists() {
+                settings.curseforge_instances_dir = None;
+            }
+        }
+
+        Ok(settings)
     }
 
     pub fn save_global_settings(&self, settings: &GlobalSettings) -> Result<(), String> {
-        let raw = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+        let mut locked = settings.clone();
+        locked.github_update_repo = OFFICIAL_GITHUB_REPO.to_string();
+        if let Some(ref cf_dir) = locked.curseforge_instances_dir {
+            if cf_dir.trim().is_empty() || !Path::new(cf_dir).exists() {
+                locked.curseforge_instances_dir = None;
+            }
+        }
+        let raw = serde_json::to_string_pretty(&locked).map_err(|e| e.to_string())?;
         fs::write(&self.settings_path, raw).map_err(|e| e.to_string())
     }
 
@@ -143,7 +165,21 @@ impl InstanceManager {
             return Ok(Vec::new());
         }
         let raw = fs::read_to_string(&self.registry_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&raw).map_err(|e| e.to_string())
+        let list: Vec<InstanceConfig> = serde_json::from_str(&raw).unwrap_or_default();
+
+        // Keep all Custom instances (ensuring their directory exists) and only keep CurseForge instances if their folder exists on disk
+        let filtered: Vec<InstanceConfig> = list
+            .into_iter()
+            .filter(|inst| match inst.source {
+                InstanceSource::Custom => {
+                    let _ = fs::create_dir_all(&inst.game_dir);
+                    true
+                }
+                InstanceSource::CurseForge => inst.game_dir.exists(),
+            })
+            .collect();
+
+        Ok(filtered)
     }
 
     pub fn save_instances(&self, instances: &[InstanceConfig]) -> Result<(), String> {

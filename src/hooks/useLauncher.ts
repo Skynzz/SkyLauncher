@@ -113,7 +113,12 @@ export interface EffectiveLaunchSettings {
 }
 
 export interface RecoveryAction {
-  actionType: "increase_ram" | "switch_java" | "reset_config" | "disable_mod";
+  actionType:
+    | "increase_ram"
+    | "switch_java"
+    | "reset_config"
+    | "disable_mod"
+    | "install_missing_mod";
   labelTr: string;
   labelEn: string;
   targetValue: string;
@@ -329,6 +334,7 @@ export function useLauncher(callbacks?: {
     activeThemeId: "sky-slate",
     curseforgeApiKey: null,
     autoBackupWorlds: true,
+    githubUpdateRepo: "Skynzz/SkyLauncher",
   });
 
   const [themes, setThemes] = useState<ThemeManifest[]>([]);

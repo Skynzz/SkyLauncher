@@ -4,7 +4,6 @@ import {
   Cpu,
   Download,
   FolderOpen,
-  Github,
   Play,
   Rocket,
   ShieldCheck,
@@ -36,15 +35,14 @@ interface SetupWizardProps {
   onExitSetupMode: () => void;
 }
 
+const OFFICIAL_GITHUB_REPO = "Skynzz/SkyLauncher";
+
 export const SetupWizard: React.FC<SetupWizardProps> = ({
   envInfo,
   downloadProgress,
   onExitSetupMode,
 }) => {
   const [installDir, setInstallDir] = useState(envInfo.defaultInstallDir);
-  const [githubRepo, setGithubRepo] = useState(
-    envInfo.githubRepo || "Sky_o/SkyLauncher"
-  );
   const [installJava21, setInstallJava21] = useState(true);
   const [createDesktopShortcut, setCreateDesktopShortcut] = useState(true);
 
@@ -60,10 +58,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         initialDir: installDir,
       });
       if (picked) {
-        const normalized = picked.endsWith("\\SkyLauncher") ||
-          picked.endsWith("/SkyLauncher")
-          ? picked
-          : `${picked.replace(/[\\/]+$/, "")}\\SkyLauncher`;
+        const normalized =
+          picked.endsWith("\\SkyLauncher") || picked.endsWith("/SkyLauncher")
+            ? picked
+            : `${picked.replace(/[\\/]+$/, "")}\\SkyLauncher`;
         setInstallDir(normalized);
       }
     } catch (err) {
@@ -77,7 +75,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     try {
       const res = await invoke<SetupInstallResult>("run_setup_installer_cmd", {
         installDir,
-        githubRepo,
+        githubRepo: OFFICIAL_GITHUB_REPO,
         installJava21,
         createDesktopShortcut,
       });
@@ -130,7 +128,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 </span>
               </div>
               <p className="text-xs text-text-secondary mt-0.5">
-                Gerekli bağımlılıkları denetler, GitHub üzerinden SkyLauncher'ı indirir ve kullanıma hazır kurar.
+                Gerekli bağımlılıkları denetler, resmi bulut sunucusundan SkyLauncher'ı indirir ve kullanıma hazır kurar.
               </p>
             </div>
           </div>
@@ -218,30 +216,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   </button>
                 </div>
                 <p className="text-[11px] text-text-secondary mt-1.5">
-                  SkyLauncher çalıştırılabilir dosyası (<code>SkyLauncher.exe</code>) seçtiğiniz bu klasöre kurulacaktır.
-                </p>
-              </div>
-
-              {/* GitHub Repository Input */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">
-                  3. GitHub Uygulama ve Güncelleme Deposu
-                </label>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Github className="w-4 h-4 text-text-secondary absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={githubRepo}
-                      onChange={(e) => setGithubRepo(e.target.value)}
-                      disabled={installing}
-                      placeholder="kullaniciadi/SkyLauncher"
-                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-bg-secondary border border-border-subtle text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-text-secondary mt-1.5">
-                  Kurulum sihirbazı <code>github.com/{githubRepo || "Sky_o/SkyLauncher"}</code> üzerindeki en güncel sürümü kontrol eder; çevrimdışıysanız veya depo henüz yüklenmemişse yerleşik paketi kurar.
+                  SkyLauncher çalıştırılabilir dosyası (<code>SkyLauncher.exe</code>) seçtiğiniz bu klasöre kurulacaktır. Harici bir programa (CurseForge vb.) ihtiyaç duymadan bağımsız çalışır.
                 </p>
               </div>
 
@@ -259,6 +234,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                     Masaüstü ve Başlat Menüsüne <strong>SkyLauncher</strong> kısayolu ekle
                   </span>
                 </label>
+                <span className="text-[10px] font-mono text-text-muted">
+                  Kaynak: {OFFICIAL_GITHUB_REPO}
+                </span>
               </div>
 
               {/* Live Progress Bar during Installation */}
@@ -344,7 +322,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   <span className="text-text-secondary">Kurulum Kaynağı:</span>
                   <span className="text-emerald-400 font-semibold">
                     {result.downloadedFromGithub
-                      ? "GitHub Deposu (Çevrimiçi Güncel Sürüm)"
+                      ? `Resmi GitHub Deposu (${OFFICIAL_GITHUB_REPO})`
                       : "Yerleşik Kurulum Paketi (Doğrulanmış PE)"}
                   </span>
                 </div>

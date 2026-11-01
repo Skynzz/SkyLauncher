@@ -37,7 +37,7 @@ use instance::pack_share::{
     sync_options_txt_across_instances, ModPoolOptimizationReport, ScreenshotEntry,
     SkyCodeExportResult, WorldBackupEntry, WorldSaveEntry,
 };
-use instance::{GlobalSettings, InstanceConfig, InstanceManager};
+use instance::{GlobalSettings, InstanceConfig, InstanceManager, OFFICIAL_GITHUB_REPO};
 use notify::RecommendedWatcher;
 use parking_lot::Mutex;
 use runner::{
@@ -242,10 +242,20 @@ fn rescan_curseforge_instances(
     custom_dir: Option<String>,
 ) -> Result<Vec<InstanceConfig>, String> {
     let settings = state.instance_manager.load_global_settings()?;
-    let target_dir = custom_dir.or(settings.curseforge_instances_dir);
+    let target_dir = custom_dir
+        .filter(|s| !s.trim().is_empty())
+        .or(settings.curseforge_instances_dir)
+        .or_else(|| {
+            dirs::home_dir()
+                .map(|h| h.join("curseforge").join("minecraft").join("Instances"))
+                .filter(|p| p.exists())
+                .and_then(|p| p.to_str().map(|s| s.to_string()))
+        });
     if let Some(dir_str) = target_dir {
         let p = PathBuf::from(dir_str);
-        scan_curseforge_directory(&p, &state.instance_manager)?;
+        if p.exists() {
+            let _ = scan_curseforge_directory(&p, &state.instance_manager);
+        }
     }
     state.instance_manager.load_instances()
 }
@@ -958,14 +968,12 @@ fn get_setup_environment_cmd(state: State<'_, AppState>) -> SetupEnvironmentInfo
     installed_java_majors.sort_unstable();
     installed_java_majors.dedup();
 
-    let global = state.instance_manager.load_global_settings().unwrap_or_default();
-
     SetupEnvironmentInfo {
         is_setup_mode,
         default_install_dir,
         webview2_installed: true,
         installed_java_majors,
-        github_repo: global.github_update_repo,
+        github_repo: OFFICIAL_GITHUB_REPO.to_string(),
         app_version: CURRENT_APP_VERSION.to_string(),
     }
 }
@@ -1012,7 +1020,7 @@ async fn run_setup_installer_cmd(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     install_dir: String,
-    github_repo: String,
+    _github_repo: Option<String>,
     install_java21: bool,
     create_desktop_shortcut: bool,
 ) -> Result<SetupInstallResult, String> {
@@ -1025,12 +1033,10 @@ async fn run_setup_installer_cmd(
     std::fs::create_dir_all(&target_dir)
         .map_err(|e| format!("Kurulum dizini oluşturulamadı ({}): {}", target_dir.display(), e))?;
 
-    // Save GitHub repository to GlobalSettings so future updates pull from it
+    // Always lock GlobalSettings to OFFICIAL_GITHUB_REPO ("Skynzz/SkyLauncher")
     if let Ok(mut settings) = state.instance_manager.load_global_settings() {
-        if !github_repo.trim().is_empty() {
-            settings.github_update_repo = github_repo.trim().to_string();
-            let _ = state.instance_manager.save_global_settings(&settings);
-        }
+        settings.github_update_repo = OFFICIAL_GITHUB_REPO.to_string();
+        let _ = state.instance_manager.save_global_settings(&settings);
     }
 
     // Stage 1: Check / Install Adoptium Java 21 JRE if requested
@@ -1059,7 +1065,7 @@ async fn run_setup_installer_cmd(
         }
     }
 
-    // Stage 2: Download SkyLauncher.exe from GitHub repository (or fallback to embedded payload)
+    // Stage 2: Download SkyLauncher.exe from official GitHub repository (Skynzz/SkyLauncher)
     let _ = app_handle.emit(
         "download-progress",
         DownloadProgressEvent {
@@ -1068,7 +1074,8 @@ async fn run_setup_installer_cmd(
             total_files: 4,
             current_label: "SkyLauncher.exe".to_string(),
             phase: "setup-binary".to_string(),
-            stage_text: "Aşama 2/3: SkyLauncher GitHub Deposundan İndiriliyor...".to_string(),
+            stage_text: "Aşama 2/3: SkyLauncher GitHub Deposundan (Skynzz/SkyLauncher) İndiriliyor..."
+                .to_string(),
         },
     );
 
@@ -1076,45 +1083,40 @@ async fn run_setup_installer_cmd(
     let staging_exe = target_dir.join("SkyLauncher.exe.download");
     let mut downloaded_from_github = false;
 
-    let clean_repo = github_repo
-        .trim()
-        .trim_start_matches("https://github.com/")
-        .trim_matches('/');
+    let clean_repo = OFFICIAL_GITHUB_REPO;
 
-    if !clean_repo.is_empty() && clean_repo.contains('/') {
-        let candidate_url = if let Ok(check) =
-            check_github_update(state.download_engine.client(), clean_repo).await
-        {
-            check.download_url.unwrap_or_else(|| {
-                format!("https://github.com/{}/raw/main/SkyLauncher.exe", clean_repo)
-            })
-        } else {
+    let candidate_url = if let Ok(check) =
+        check_github_update(state.download_engine.client(), clean_repo).await
+    {
+        check.download_url.unwrap_or_else(|| {
             format!("https://github.com/{}/raw/main/SkyLauncher.exe", clean_repo)
-        };
+        })
+    } else {
+        format!("https://github.com/{}/raw/main/SkyLauncher.exe", clean_repo)
+    };
 
-        if state
-            .download_engine
-            .download_single(&DownloadTask {
-                url: candidate_url,
-                destination: staging_exe.clone(),
-                expected_sha1: None,
-                expected_size: None,
-                label: "SkyLauncher.exe (GitHub)".to_string(),
-            })
-            .await
-            .is_ok()
-        {
-            if verify_pe_executable(&staging_exe).is_ok() {
-                let _ = std::fs::remove_file(&dest_exe);
-                if std::fs::rename(&staging_exe, &dest_exe).is_ok() {
-                    downloaded_from_github = true;
-                }
+    if state
+        .download_engine
+        .download_single(&DownloadTask {
+            url: candidate_url,
+            destination: staging_exe.clone(),
+            expected_sha1: None,
+            expected_size: None,
+            label: "SkyLauncher.exe (GitHub)".to_string(),
+        })
+        .await
+        .is_ok()
+    {
+        if verify_pe_executable(&staging_exe).is_ok() {
+            let _ = std::fs::remove_file(&dest_exe);
+            if std::fs::rename(&staging_exe, &dest_exe).is_ok() {
+                downloaded_from_github = true;
             }
         }
-        let _ = std::fs::remove_file(&staging_exe);
     }
+    let _ = std::fs::remove_file(&staging_exe);
 
-    // Self-contained fallback: copy the current executable engine as SkyLauncher.exe if GitHub repo has no release binary yet
+    // Self-contained fallback: copy the current executable engine as SkyLauncher.exe if offline
     if !downloaded_from_github {
         let current_bin = std::env::current_exe()
             .map_err(|e| format!("Kurulum motoru okunamadı: {}", e))?;
@@ -1230,13 +1232,9 @@ fn get_system_telemetry(state: State<'_, AppState>) -> SystemTelemetry {
 #[tauri::command]
 async fn check_app_update_cmd(
     state: State<'_, AppState>,
-    custom_repo: Option<String>,
+    _custom_repo: Option<String>,
 ) -> Result<UpdateCheckResult, String> {
-    let global = state.instance_manager.load_global_settings().unwrap_or_default();
-    let repo = custom_repo
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or(global.github_update_repo);
-    check_github_update(state.download_engine.client(), &repo).await
+    check_github_update(state.download_engine.client(), OFFICIAL_GITHUB_REPO).await
 }
 
 #[tauri::command]
