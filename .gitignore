@@ -1,0 +1,11 @@
+# Derleme ve Bağımlılık Önbellekleri (GitHub'a yüklenmemeli)
+node_modules/
+src-tauri/target/
+
+# Geçici ve Yedek Dosyalar
+*.old
+*.new
+*.download
+*.log
+.DS_Store
+Thumbs.db
