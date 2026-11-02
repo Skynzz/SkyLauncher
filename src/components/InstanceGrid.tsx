@@ -373,29 +373,17 @@ export const InstanceGrid: React.FC<InstanceGridProps> = ({
                 {/* Action Bar */}
                 <div className="flex items-center gap-2">
                   {isRunning ? (
-                    <button
-                      onClick={() => handleStopGame(inst.id)}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-xs transition"
-                    >
-                      <Square className="w-3.5 h-3.5 fill-current" />
-                      <span>{t.stopBtn}</span>
-                    </button>
-                  ) : isLaunching ? (
-                    <div className="flex-1 flex items-center gap-1.5">
-                      <button
-                        disabled
-                        className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-accent-primary/60 text-white font-semibold text-xs cursor-wait"
-                      >
-                        <span>{t.launchingBtn}</span>
-                      </button>
-                      <button
-                        onClick={() => handleCancelDownload(inst.id)}
-                        title={t.cancelBtn}
-                        className="px-2.5 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-medium transition"
-                      >
-                        {t.cancelBtn}
-                      </button>
+                    <div className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>{language === "tr" ? "Oyun Açık" : "Playing"}</span>
                     </div>
+                  ) : isLaunching ? (
+                    <button
+                      disabled
+                      className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-accent-primary/50 text-white font-semibold text-xs cursor-wait"
+                    >
+                      <span>{t.launchingBtn}</span>
+                    </button>
                   ) : (
                     <button
                       onClick={() => handleLaunch(inst)}
@@ -427,43 +415,6 @@ export const InstanceGrid: React.FC<InstanceGridProps> = ({
           })}
         </div>
       </div>
-
-      {/* Bottom Clean Download Progress Bar with Stage Indicator & Cancel Button */}
-      {downloadProgress && (
-        <div className="mt-4 p-4 rounded-xl bg-bg-card border border-border-subtle space-y-2.5">
-          <div className="flex items-center justify-between gap-3 text-xs">
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold text-text-primary truncate">
-                {downloadProgress.stageText || t.downloadingStatus}
-              </div>
-              <div className="text-[11px] text-text-secondary truncate mt-0.5">
-                {downloadProgress.currentLabel} (
-                {downloadProgress.completedFiles}/{downloadProgress.totalFiles})
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="text-text-primary font-semibold">
-                %{progressPercent}
-              </span>
-              <button
-                onClick={() =>
-                  handleCancelDownload(downloadProgress.instanceId)
-                }
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-300 text-xs font-medium transition"
-              >
-                <X className="w-3.5 h-3.5" />
-                <span>{t.cancelBtn}</span>
-              </button>
-            </div>
-          </div>
-          <div className="w-full h-1.5 rounded-full bg-bg-elevated overflow-hidden">
-            <div
-              className="h-full bg-accent-primary transition-all duration-150"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Simplified Pack Settings Modal */}
       {editingInstance && (

@@ -1,5 +1,5 @@
 {
-  "version": "1.1.1",
-  "notes": "SkyLauncher v1.1.1: Resmi Skynzz/SkyLauncher GitHub güncelleme sunucusu gömüldü, CurseForge bağımsız (Standalone) çalışma modu güçlendirildi, Otomatik Mod Gereksinim Tamamlama ve SkyShield Siber Güvenlik Koruması eklendi.",
+  "version": "1.2.0",
+  "notes": "SkyLauncher v1.2.0: CurseForge ve modern Forge/NeoForge modpaketlerinin arkaplanda takılı kalma (1GB RAM deadlock) sorunu çözüldü, eş zamanlı I/O ve otomatik kopya mod temizleme (Duplicate Mod Healer) eklendi. Sabit çözünürlük yerine bozulmayan 3 modlu pencere boyutu (Küçük 1024x640, Orta 1280x768, Tam Ekran) entegre edildi.",
   "downloadUrl": "https://github.com/Skynzz/SkyLauncher/raw/main/SkyLauncher.exe"
 }

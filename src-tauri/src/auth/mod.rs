@@ -57,38 +57,22 @@ pub struct ProfileManager {
 
 impl ProfileManager {
     pub fn new(app_data_dir: &Path) -> Self {
-        let store_path = app_data_dir.join("profiles.json");
-        let manager = Self { store_path };
-        manager.ensure_default_profile();
-        manager
-    }
+        let data_dir = app_data_dir.join("data");
+        let _ = fs::create_dir_all(&data_dir);
+        let store_path = data_dir.join("profiles.json");
 
-    fn ensure_default_profile(&self) {
-        if !self.store_path.exists() {
-            let default_username = "Developer";
-            let uuid = generate_offline_uuid(default_username);
-            let now = Utc::now();
-            let profile = OfflineProfile {
-                id: uuid.clone(),
-                username: default_username.to_string(),
-                uuid,
-                access_token: "0".to_string(),
-                user_type: "legacy".to_string(),
-                avatar_color: "#6366f1".to_string(),
-                created_at: now,
-                last_used: now,
-            };
-            let store = AuthStore {
-                active_profile_id: Some(profile.id.clone()),
-                profiles: vec![profile],
-            };
-            let _ = self.save_store(&store);
+        // Migrate legacy store from root app_data_dir if present
+        let legacy_store = app_data_dir.join("profiles.json");
+        if legacy_store.exists() && !store_path.exists() {
+            let _ = fs::rename(&legacy_store, &store_path);
         }
+
+        Self { store_path }
     }
 
     pub fn load_store(&self) -> Result<AuthStore, String> {
         if !self.store_path.exists() {
-            self.ensure_default_profile();
+            return Ok(AuthStore::default());
         }
         let raw = fs::read_to_string(&self.store_path)
             .map_err(|e| format!("Failed to read profiles.json: {}", e))?;
@@ -171,9 +155,6 @@ impl ProfileManager {
 
     pub fn delete_profile(&self, profile_id: &str) -> Result<AuthStore, String> {
         let mut store = self.load_store()?;
-        if store.profiles.len() <= 1 {
-            return Err("At least one local profile must remain.".to_string());
-        }
         store.profiles.retain(|p| p.id != profile_id);
         if store.active_profile_id.as_deref() == Some(profile_id) {
             store.active_profile_id = store.profiles.first().map(|p| p.id.clone());

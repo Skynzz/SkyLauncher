@@ -33,12 +33,18 @@ pub struct GlobalSettings {
     pub auto_backup_worlds: bool,
     #[serde(default = "default_github_repo")]
     pub github_update_repo: String,
+    #[serde(default = "default_window_size_mode")]
+    pub window_size_mode: String,
 }
 
 pub const OFFICIAL_GITHUB_REPO: &str = "Skynzz/SkyLauncher";
 
 fn default_github_repo() -> String {
     OFFICIAL_GITHUB_REPO.to_string()
+}
+
+fn default_window_size_mode() -> String {
+    "medium".to_string()
 }
 
 impl Default for GlobalSettings {
@@ -57,10 +63,11 @@ impl Default for GlobalSettings {
             curseforge_instances_dir: default_cf_dir,
             hide_launcher_on_launch: false,
             language: "tr".to_string(),
-            active_theme_id: "sky-slate".to_string(),
+            active_theme_id: "midnight-zinc".to_string(),
             curseforge_api_key: None,
             auto_backup_worlds: true,
             github_update_repo: default_github_repo(),
+            window_size_mode: default_window_size_mode(),
         }
     }
 }
@@ -101,8 +108,22 @@ impl InstanceManager {
     pub fn new(app_data_dir: &Path) -> Self {
         let instances_dir = app_data_dir.join("instances");
         let _ = fs::create_dir_all(&instances_dir);
-        let settings_path = app_data_dir.join("global_settings.json");
-        let registry_path = app_data_dir.join("instances_registry.json");
+
+        let data_dir = app_data_dir.join("data");
+        let _ = fs::create_dir_all(&data_dir);
+
+        let settings_path = data_dir.join("global_settings.json");
+        let registry_path = data_dir.join("instances_registry.json");
+
+        // Migrate legacy settings and registry from root app_data_dir if present
+        let legacy_settings = app_data_dir.join("global_settings.json");
+        if legacy_settings.exists() && !settings_path.exists() {
+            let _ = fs::rename(&legacy_settings, &settings_path);
+        }
+        let legacy_registry = app_data_dir.join("instances_registry.json");
+        if legacy_registry.exists() && !registry_path.exists() {
+            let _ = fs::rename(&legacy_registry, &registry_path);
+        }
 
         let mgr = Self {
             app_data_dir: app_data_dir.to_path_buf(),

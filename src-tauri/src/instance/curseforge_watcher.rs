@@ -98,11 +98,24 @@ pub fn parse_curseforge_instance_folder(folder: &Path) -> Option<InstanceConfig>
                             .filter(|s| !s.trim().is_empty())
                             .map(|s| s.to_string())
                             .or_else(|| {
-                                bml_name
-                                    .split('-')
-                                    .nth(1)
-                                    .filter(|s| !s.trim().is_empty())
-                                    .map(|s| s.to_string())
+                                let lower = bml_name.to_lowercase();
+                                let stripped = if let Some(rest) = lower.strip_prefix("neoforge-") {
+                                    rest
+                                } else if let Some(rest) = lower.strip_prefix("forge-") {
+                                    rest
+                                } else if let Some(rest) = lower.strip_prefix("fabric-") {
+                                    rest
+                                } else if let Some(rest) = lower.strip_prefix("quilt-") {
+                                    rest
+                                } else {
+                                    &lower
+                                };
+                                let clean = stripped.strip_prefix(&format!("{}-", mc_version)).unwrap_or(stripped);
+                                if clean.is_empty() {
+                                    None
+                                } else {
+                                    Some(clean.to_string())
+                                }
                             });
                         (loader_type, ver)
                     } else {
@@ -165,7 +178,22 @@ pub fn parse_curseforge_instance_folder(folder: &Path) -> Option<InstanceConfig>
                     if let Some(primary) = loaders.first() {
                         if let Some(id_str) = primary.get("id").and_then(|v| v.as_str()) {
                             modloader = ModloaderType::from_str_loose(id_str);
-                            modloader_version = id_str.split('-').nth(1).map(|s| s.to_string());
+                            let lower = id_str.to_lowercase();
+                            let stripped = if let Some(rest) = lower.strip_prefix("neoforge-") {
+                                rest
+                            } else if let Some(rest) = lower.strip_prefix("forge-") {
+                                rest
+                            } else if let Some(rest) = lower.strip_prefix("fabric-") {
+                                rest
+                            } else if let Some(rest) = lower.strip_prefix("quilt-") {
+                                rest
+                            } else {
+                                &lower
+                            };
+                            let clean = stripped.strip_prefix(&format!("{}-", mc_version)).unwrap_or(stripped);
+                            if !clean.is_empty() {
+                                modloader_version = Some(clean.to_string());
+                            }
                         }
                     }
                 }

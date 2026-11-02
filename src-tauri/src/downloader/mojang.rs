@@ -330,60 +330,66 @@ pub fn collect_libraries_and_classpath(
                 continue;
             }
 
-            if let Some((maven_key, rel_path)) = maven_coord_to_path(name) {
-                let dest = libraries_dir.join(&rel_path);
-                let mut dl_sha1: Option<String> = None;
-                let mut dl_size: Option<u64> = None;
+            // Skip generating base JAR tasks for legacy native-only classifier libraries (e.g. jinput-platform:2.0.5)
+            let is_classifier_only = lib.pointer("/downloads/artifact").is_none()
+                && (lib.get("natives").is_some() || lib.pointer("/downloads/classifiers").is_some());
 
-                let dl_url: Option<String> =
-                    if let Some(artifact) = lib.pointer("/downloads/artifact") {
-                        dl_sha1 = artifact
-                            .get("sha1")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                        dl_size = artifact.get("size").and_then(|v| v.as_u64());
-                        artifact
-                            .get("url")
-                            .and_then(|v| v.as_str())
-                            .filter(|s| !s.is_empty())
-                            .map(|s| s.to_string())
-                            .or_else(|| {
-                                // Fallback for Forge/NeoForge libraries where url is empty but exists on Maven
-                                if dest.exists() {
-                                    None
-                                } else {
-                                    let trimmed = default_base_url.trim_end_matches('/');
-                                    Some(format!("{}/{}", trimmed, rel_path))
-                                }
-                            })
-                    } else if dest.exists() {
-                        None
-                    } else {
-                        let base = lib
-                            .get("url")
-                            .and_then(|v| v.as_str())
-                            .filter(|s| !s.is_empty())
-                            .unwrap_or(default_base_url);
-                        let trimmed = base.trim_end_matches('/');
-                        Some(format!("{}/{}", trimmed, rel_path))
-                    };
+            if !is_classifier_only {
+                if let Some((maven_key, rel_path)) = maven_coord_to_path(name) {
+                    let dest = libraries_dir.join(&rel_path);
+                    let mut dl_sha1: Option<String> = None;
+                    let mut dl_size: Option<u64> = None;
 
-                if name.to_lowercase().contains("natives-") {
-                    native_jars_to_extract.push(dest.clone());
+                    let dl_url: Option<String> =
+                        if let Some(artifact) = lib.pointer("/downloads/artifact") {
+                            dl_sha1 = artifact
+                                .get("sha1")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                            dl_size = artifact.get("size").and_then(|v| v.as_u64());
+                            artifact
+                                .get("url")
+                                .and_then(|v| v.as_str())
+                                .filter(|s| !s.is_empty())
+                                .map(|s| s.to_string())
+                                .or_else(|| {
+                                    // Fallback for Forge/NeoForge libraries where url is empty but exists on Maven
+                                    if dest.exists() {
+                                        None
+                                    } else {
+                                        let trimmed = default_base_url.trim_end_matches('/');
+                                        Some(format!("{}/{}", trimmed, rel_path))
+                                    }
+                                })
+                        } else if dest.exists() {
+                            None
+                        } else {
+                            let base = lib
+                                .get("url")
+                                .and_then(|v| v.as_str())
+                                .filter(|s| !s.is_empty())
+                                .unwrap_or(default_base_url);
+                            let trimmed = base.trim_end_matches('/');
+                            Some(format!("{}/{}", trimmed, rel_path))
+                        };
+
+                    if name.to_lowercase().contains("natives-") {
+                        native_jars_to_extract.push(dest.clone());
+                    }
+
+                    let task = dl_url.map(|url| DownloadTask {
+                        url,
+                        destination: dest.clone(),
+                        expected_sha1: dl_sha1,
+                        expected_size: dl_size,
+                        label: name.to_string(),
+                    });
+
+                    if !ordered_keys.contains(&maven_key) {
+                        ordered_keys.push(maven_key.clone());
+                    }
+                    maven_map.insert(maven_key, (dest, task));
                 }
-
-                let task = dl_url.map(|url| DownloadTask {
-                    url,
-                    destination: dest.clone(),
-                    expected_sha1: dl_sha1,
-                    expected_size: dl_size,
-                    label: name.to_string(),
-                });
-
-                if !ordered_keys.contains(&maven_key) {
-                    ordered_keys.push(maven_key.clone());
-                }
-                maven_map.insert(maven_key, (dest, task));
             }
 
             // Legacy classifier natives (MC <= 1.18.2)
@@ -521,4 +527,47 @@ pub fn extract_natives(native_jars: &[PathBuf], natives_dir: &Path) -> Result<()
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_skip_phantom_base_jar_for_classifier_only_library() {
+        let json = serde_json::json!({
+            "name": "net.java.jinput:jinput-platform:2.0.5",
+            "downloads": {
+                "classifiers": {
+                    "natives-windows": {
+                        "path": "net/java/jinput/jinput-platform/2.0.5/jinput-platform-2.0.5-natives-windows.jar",
+                        "sha1": "7c3738992f9d86bdd3ac7ac60b6b77166e616d68",
+                        "size": 61424,
+                        "url": "https://libraries.minecraft.net/net/java/jinput/jinput-platform/2.0.5/jinput-platform-2.0.5-natives-windows.jar"
+                    }
+                }
+            },
+            "natives": {
+                "windows": "natives-windows"
+            }
+        });
+
+        let vanilla_json = serde_json::json!({
+            "libraries": [json]
+        });
+
+        let shared_root = PathBuf::from("test_shared");
+        let (tasks, _classpath, _native_jars) = collect_libraries_and_classpath(
+            &vanilla_json,
+            None,
+            "1.12.2",
+            &shared_root,
+        );
+
+        let phantom_task = tasks.iter().find(|t| t.url.ends_with("jinput-platform-2.0.5.jar"));
+        assert!(phantom_task.is_none(), "Phantom base jar must not be queued for download");
+
+        let native_task = tasks.iter().find(|t| t.url.contains("natives-windows"));
+        assert!(native_task.is_some(), "Native classifier task must be queued");
+    }
 }

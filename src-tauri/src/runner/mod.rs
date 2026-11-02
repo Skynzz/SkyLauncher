@@ -367,10 +367,121 @@ pub fn cleanup_prelaunch_environment(game_dir: &Path) -> PreLaunchCleanupSummary
         }
     }
 
+    // Automatically heal duplicate mod JAR versions in `mods/`
+    let _ = heal_duplicate_mod_jars(&game_dir.join("mods"));
+
     PreLaunchCleanupSummary {
         removed_session_locks,
         terminated_zombie_pids,
     }
+}
+
+/// Scans the instance's `mods` directory and disables duplicate versions of the same mod,
+/// preventing Forge/NeoForge from fatally crashing with `EarlyLoadingException: Duplicate mods found`.
+pub fn heal_duplicate_mod_jars(mods_dir: &Path) -> usize {
+    if !mods_dir.exists() {
+        return 0;
+    }
+
+    let mut jars: Vec<(String, PathBuf, u64)> = Vec::new();
+    if let Ok(entries) = fs::read_dir(mods_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.ends_with(".jar") && !name.ends_with(".disabled") {
+                        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        jars.push((name.to_string(), path, size));
+                    }
+                }
+            }
+        }
+    }
+
+    if jars.len() < 2 {
+        return 0;
+    }
+
+    let mut mod_id_map: HashMap<String, Vec<(String, PathBuf, u64)>> = HashMap::new();
+
+    for (name, path, size) in jars {
+        let mut detected_id = None;
+        if let Ok(file) = fs::File::open(&path) {
+            if let Ok(mut archive) = zip::ZipArchive::new(file) {
+                // Check mods.toml (Forge/NeoForge)
+                if let Ok(mut toml_file) = archive.by_name("META-INF/mods.toml") {
+                    let mut s = String::new();
+                    use std::io::Read;
+                    if toml_file.read_to_string(&mut s).is_ok() {
+                        for line in s.lines() {
+                            let trimmed = line.trim();
+                            if trimmed.starts_with("modId") {
+                                if let Some(id) = trimmed.split('=').nth(1) {
+                                    let clean = id.trim().trim_matches('"').trim_matches('\'').trim();
+                                    if !clean.is_empty() {
+                                        detected_id = Some(clean.to_string());
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Check fabric.mod.json (Fabric/Quilt)
+                if detected_id.is_none() {
+                    if let Ok(mut fmj_file) = archive.by_name("fabric.mod.json") {
+                        let mut s = String::new();
+                        use std::io::Read;
+                        if fmj_file.read_to_string(&mut s).is_ok() {
+                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&s) {
+                                if let Some(id) = val.get("id").and_then(|v| v.as_str()) {
+                                    detected_id = Some(id.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: group by base name prefix before version numbers
+        let group_key = detected_id.unwrap_or_else(|| {
+            let stem = name.strip_suffix(".jar").unwrap_or(&name);
+            let mut prefix_parts = Vec::new();
+            for part in stem.split(['-', '_']) {
+                let first_char = part.chars().next().unwrap_or(' ');
+                if first_char.is_ascii_digit()
+                    || (part.starts_with('v')
+                        && part.chars().nth(1).map(|c| c.is_ascii_digit()).unwrap_or(false))
+                {
+                    break;
+                }
+                prefix_parts.push(part);
+            }
+            if prefix_parts.is_empty() {
+                stem.to_string()
+            } else {
+                prefix_parts.join("-")
+            }
+        });
+
+        mod_id_map.entry(group_key).or_default().push((name, path, size));
+    }
+
+    let mut disabled_count = 0;
+    for (_key, mut list) in mod_id_map {
+        if list.len() > 1 {
+            list.sort_by(|a, b| b.0.cmp(&a.0));
+            for (_dup_name, dup_path, _) in list.into_iter().skip(1) {
+                let new_name = format!("{}.disabled", dup_path.to_string_lossy());
+                if fs::rename(&dup_path, &new_name).is_ok() {
+                    disabled_count += 1;
+                }
+            }
+        }
+    }
+
+    disabled_count
 }
 
 /// Terminates a running Minecraft process by PID or instance game_dir.
@@ -430,6 +541,34 @@ fn extract_modloader_args(
                     if !expanded.contains(&mc_jar) {
                         expanded.push(',');
                         expanded.push_str(&mc_jar);
+                    }
+                }
+
+                // Resolve relative `@libraries/...` arguments to absolute paths
+                if expanded.starts_with("@libraries/") || expanded.starts_with("@libraries\\") {
+                    let rel = expanded.trim_start_matches('@');
+                    let abs = library_dir.parent().unwrap_or(library_dir).join(rel);
+                    expanded = format!("@{}", abs.to_string_lossy());
+                } else if expanded.starts_with("-Djava.class.path=@libraries/")
+                    || expanded.starts_with("-Djava.class.path=@libraries\\")
+                {
+                    let prefix = "-Djava.class.path=@";
+                    let rel = &expanded[prefix.len()..];
+                    let abs = library_dir.parent().unwrap_or(library_dir).join(rel);
+                    expanded = format!("-Djava.class.path=@{}", abs.to_string_lossy());
+                } else if expanded.starts_with("-Djava.class.path=@") {
+                    let prefix = "-Djava.class.path=@";
+                    let rest = &expanded[prefix.len()..];
+                    if !rest.contains('/') && !rest.contains('\\') {
+                        let candidate = library_dir
+                            .join("net")
+                            .join("minecraftforge")
+                            .join("forge")
+                            .join(version_name)
+                            .join(rest);
+                        if candidate.exists() {
+                            expanded = format!("-Djava.class.path=@{}", candidate.to_string_lossy());
+                        }
                     }
                 }
                 out.push(expanded);
@@ -752,12 +891,7 @@ pub async fn launch_instance_process(
     let session_start = std::time::Instant::now();
     let _ = app_handle.emit("game-started", &instance.id);
 
-    if global.hide_launcher_on_launch {
-        if let Some(win) = app_handle.get_webview_window("main") {
-            let _ = win.hide();
-        }
-    }
-
+    let hide_launcher = global.hide_launcher_on_launch;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let app_monitor = app_handle.clone();
@@ -765,33 +899,80 @@ pub async fn launch_instance_process(
     let pids_ref = running_pids.clone();
 
     tokio::spawn(async move {
-        let mut captured_log = String::new();
+        let captured_log = Arc::new(Mutex::new(String::new()));
+        let game_window_confirmed = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-        if let Some(out) = stdout {
-            let app_out = app_monitor.clone();
-            let inst_id = inst_clone.id.clone();
-            let mut reader = BufReader::new(out).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                let _ = app_out.emit("game-log-line", (&inst_id, &line));
-                if captured_log.len() < 65536 {
-                    captured_log.push_str(&line);
-                    captured_log.push('\n');
+        let app_out = app_monitor.clone();
+        let inst_id_out = inst_clone.id.clone();
+        let cap_out = captured_log.clone();
+        let gwc_out = game_window_confirmed.clone();
+        let win_out = app_monitor.clone();
+
+        let stdout_task = tokio::spawn(async move {
+            if let Some(out) = stdout {
+                let mut reader = BufReader::new(out).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = app_out.emit("game-log-line", (&inst_id_out, &line));
+                    {
+                        let mut log = cap_out.lock();
+                        if log.len() < 131072 {
+                            log.push_str(&line);
+                            log.push('\n');
+                        }
+                    }
+
+                    // Check for real GLFW/OpenGL/OpenAL window creation before hiding launcher
+                    let lower = line.to_lowercase();
+                    if lower.contains("opengl")
+                        || lower.contains("lwjgl")
+                        || lower.contains("openal")
+                        || lower.contains("sound engine started")
+                        || lower.contains("setting user")
+                        || lower.contains("connecting to")
+                    {
+                        if !gwc_out.swap(true, std::sync::atomic::Ordering::SeqCst) && hide_launcher {
+                            if let Some(win) = win_out.get_webview_window("main") {
+                                let _ = win.hide();
+                            }
+                        }
+                    }
                 }
             }
-        }
+        });
 
-        if let Some(err) = stderr {
-            let app_err = app_monitor.clone();
-            let inst_id = inst_clone.id.clone();
-            let mut reader = BufReader::new(err).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                let _ = app_err.emit("game-log-line", (&inst_id, &line));
-                if captured_log.len() < 65536 {
-                    captured_log.push_str(&line);
-                    captured_log.push('\n');
+        let app_err = app_monitor.clone();
+        let inst_id_err = inst_clone.id.clone();
+        let cap_err = captured_log.clone();
+        let gwc_err = game_window_confirmed.clone();
+        let win_err = app_monitor.clone();
+
+        let stderr_task = tokio::spawn(async move {
+            if let Some(err) = stderr {
+                let mut reader = BufReader::new(err).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = app_err.emit("game-log-line", (&inst_id_err, &line));
+                    {
+                        let mut log = cap_err.lock();
+                        if log.len() < 131072 {
+                            log.push_str(&line);
+                            log.push('\n');
+                        }
+                    }
+
+                    let lower = line.to_lowercase();
+                    if lower.contains("opengl") || lower.contains("lwjgl") || lower.contains("openal") {
+                        if !gwc_err.swap(true, std::sync::atomic::Ordering::SeqCst) && hide_launcher {
+                            if let Some(win) = win_err.get_webview_window("main") {
+                                let _ = win.hide();
+                            }
+                        }
+                    }
                 }
             }
-        }
+        });
+
+        // Concurrently drain both streams so neither pipe buffer ever deadlocks!
+        let _ = tokio::join!(stdout_task, stderr_task);
 
         let status = child.wait().await;
         let elapsed_mins = (session_start.elapsed().as_secs() / 60).max(1);
@@ -804,13 +985,14 @@ pub async fn launch_instance_process(
             let _ = win.set_focus();
         }
 
+        let full_log = captured_log.lock().clone();
         // Only show crash modal if it wasn't intentionally stopped by the user
         if exit_code != 0 && was_tracked {
             let crash_report = analyze_instance_crash(
                 &inst_clone.id,
                 &inst_clone.game_dir,
                 exit_code,
-                &captured_log,
+                &full_log,
             );
             let _ = app_monitor.emit("game-crashed", &crash_report);
         } else {

@@ -385,9 +385,9 @@ export const ModManagerModal: React.FC<ModManagerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl rounded-2xl bg-bg-card border border-border-subtle shadow-2xl flex flex-col max-h-[86vh]">
+      <div className="w-full max-w-3xl rounded-2xl bg-bg-card border border-border-subtle shadow-2xl flex flex-col h-[85vh] max-h-[720px] overflow-hidden">
         {/* Header */}
-        <div className="p-4 border-b border-border-subtle flex items-center justify-between gap-2">
+        <div className="p-4 border-b border-border-subtle flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <Package className="w-4 h-4 text-accent-secondary shrink-0" />
             <h2 className="text-sm font-bold text-text-primary truncate">
@@ -421,7 +421,7 @@ export const ModManagerModal: React.FC<ModManagerModalProps> = ({
         </div>
 
         {/* One-Click Smart Tools Bar */}
-        <div className="px-4 py-2.5 bg-bg-secondary border-b border-border-subtle flex flex-wrap items-center gap-2">
+        <div className="px-4 py-2 bg-bg-secondary border-b border-border-subtle flex flex-wrap items-center gap-1.5 shrink-0">
           <button
             disabled={busyAction !== null}
             onClick={handleHealDependencies}
@@ -540,7 +540,7 @@ export const ModManagerModal: React.FC<ModManagerModalProps> = ({
         )}
 
         {/* Tabs */}
-        <div className="px-4 pt-2 border-b border-border-subtle flex items-center gap-1 overflow-x-auto">
+        <div className="px-4 pt-1.5 border-b border-border-subtle flex items-center gap-1 overflow-x-auto shrink-0">
           {(
             [
               { id: "mods", label: `${t.tabMods} (${mods.length})` },
@@ -554,7 +554,7 @@ export const ModManagerModal: React.FC<ModManagerModalProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-xs font-medium border-b-2 whitespace-nowrap transition ${
+              className={`px-3.5 py-2.5 text-xs font-semibold border-b-2 whitespace-nowrap transition inline-flex items-center ${
                 activeTab === tab.id
                   ? "border-accent-primary text-text-primary"
                   : "border-transparent text-text-secondary hover:text-text-primary"
@@ -566,7 +566,7 @@ export const ModManagerModal: React.FC<ModManagerModalProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="p-4 overflow-y-auto flex-1 space-y-2">
+        <div className="p-4 overflow-y-auto flex-1 min-h-0 space-y-2">
           {activeTab === "mods" ? (
             mods.length === 0 ? (
               <div className="py-10 text-center text-xs text-text-muted space-y-2">

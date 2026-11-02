@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Download, Sparkles, X } from "lucide-react";
+import { Download, Play, Sparkles, Square, X } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { ContentBrowser } from "./components/ContentBrowser";
 import { CrashReportModal } from "./components/CrashReportModal";
@@ -105,6 +105,53 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleToggleWindowSizeMode = async (mode: "small" | "medium") => {
+    const updated = { ...launcher.globalSettings, windowSizeMode: mode };
+    launcher.setGlobalSettings(updated);
+    try {
+      await invoke("set_window_size_mode", { mode });
+      await invoke("save_global_settings", { settings: updated });
+    } catch {
+      // ignore if outside Tauri
+    }
+  };
+
+  const activeLaunchOrRunningInst = useMemo(() => {
+    const id =
+      launcher.launchingInstanceId ||
+      launcher.runningInstanceId ||
+      launcher.downloadProgress?.instanceId;
+    if (!id) return null;
+    return launcher.instances.find((i) => i.id === id) || null;
+  }, [
+    launcher.launchingInstanceId,
+    launcher.runningInstanceId,
+    launcher.downloadProgress,
+    launcher.instances,
+  ]);
+
+  const handleGlobalStopRunningGame = async () => {
+    if (!launcher.runningInstanceId) return;
+    try {
+      await invoke("kill_instance_process_cmd", {
+        instanceId: launcher.runningInstanceId,
+      });
+    } catch {}
+    launcher.setRunningInstanceId(null);
+  };
+
+  const handleGlobalCancelLaunch = async () => {
+    const targetId =
+      launcher.launchingInstanceId || launcher.downloadProgress?.instanceId;
+    if (targetId) {
+      try {
+        await invoke("cancel_download", { instanceId: targetId });
+      } catch {}
+    }
+    launcher.setLaunchingInstanceId(null);
+    launcher.setDownloadProgress(null);
+  };
+
   const handleInstallStartupUpdate = async () => {
     if (!availableUpdate?.downloadUrl) return;
     setInstallingUpdate(true);
@@ -184,6 +231,8 @@ export const App: React.FC = () => {
         telemetry={launcher.telemetry}
         language={language}
         onToggleLanguage={handleToggleLanguage}
+        windowSizeMode={launcher.globalSettings.windowSizeMode}
+        onToggleWindowSizeMode={handleToggleWindowSizeMode}
       />
 
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
@@ -226,64 +275,175 @@ export const App: React.FC = () => {
           </div>
         )}
 
-      {activeTab === "instances" && (
-        <InstanceGrid
-          instances={launcher.instances}
-          setInstances={launcher.setInstances}
-          globalSettings={launcher.globalSettings}
-          javaRuntimes={launcher.javaRuntimes}
-          launchingInstanceId={launcher.launchingInstanceId}
-          setLaunchingInstanceId={launcher.setLaunchingInstanceId}
-          runningInstanceId={launcher.runningInstanceId}
-          setRunningInstanceId={launcher.setRunningInstanceId}
-          downloadProgress={launcher.downloadProgress}
-          setDownloadProgress={launcher.setDownloadProgress}
-          onOpenModManager={(inst) => setModModalInstance(inst)}
-          onOpenShareModal={(inst) =>
-            setShareModalState({ open: true, instance: inst })
-          }
-          onNavigateDownloader={() => setActiveTab("downloader")}
-          onTriggerCrashReport={(rep) => {
-            launcher.setActiveCrashReport(rep);
-            pluginBus.emitGameCrash(rep);
-          }}
-          onPreLaunchHook={(inst) => pluginBus.emitPreLaunch(inst)}
-          language={language}
-        />
-      )}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {activeTab === "instances" && (
+            <InstanceGrid
+              instances={launcher.instances}
+              setInstances={launcher.setInstances}
+              globalSettings={launcher.globalSettings}
+              javaRuntimes={launcher.javaRuntimes}
+              launchingInstanceId={launcher.launchingInstanceId}
+              setLaunchingInstanceId={launcher.setLaunchingInstanceId}
+              runningInstanceId={launcher.runningInstanceId}
+              setRunningInstanceId={launcher.setRunningInstanceId}
+              downloadProgress={launcher.downloadProgress}
+              setDownloadProgress={launcher.setDownloadProgress}
+              onOpenModManager={(inst) => setModModalInstance(inst)}
+              onOpenShareModal={(inst) =>
+                setShareModalState({ open: true, instance: inst })
+              }
+              onNavigateDownloader={() => setActiveTab("downloader")}
+              onTriggerCrashReport={(rep) => {
+                launcher.setActiveCrashReport(rep);
+                pluginBus.emitGameCrash(rep);
+              }}
+              onPreLaunchHook={(inst) => pluginBus.emitPreLaunch(inst)}
+              language={language}
+            />
+          )}
 
-      {activeTab === "store" && (
-        <ContentBrowser
-          instances={launcher.instances}
-          lockedInstance={storeLockedInstance}
-          onSelectTargetInstance={setStoreLockedInstance}
-          onModpackInstalled={handleInstanceCreated}
-          language={language}
-        />
-      )}
+          {activeTab === "store" && (
+            <ContentBrowser
+              instances={launcher.instances}
+              lockedInstance={storeLockedInstance}
+              onSelectTargetInstance={setStoreLockedInstance}
+              onModpackInstalled={handleInstanceCreated}
+              language={language}
+            />
+          )}
 
-      {activeTab === "downloader" && (
-        <VersionDownloader
-          onInstanceCreated={handleInstanceCreated}
-          language={language}
-        />
-      )}
+          {activeTab === "downloader" && (
+            <VersionDownloader
+              onInstanceCreated={handleInstanceCreated}
+              language={language}
+            />
+          )}
 
-      {activeTab === "settings" && (
-        <Settings
-          globalSettings={launcher.globalSettings}
-          setGlobalSettings={launcher.setGlobalSettings}
-          themes={launcher.themes}
-          onApplyTheme={launcher.applyThemeToDom}
-          plugins={launcher.plugins}
-          setPlugins={launcher.setPlugins}
-          javaRuntimes={launcher.javaRuntimes}
-          setJavaRuntimes={launcher.setJavaRuntimes}
-          pluginBusLogs={pluginBus.busLogs}
-          language={language}
-          onToggleLanguage={handleToggleLanguage}
-        />
-      )}
+          {activeTab === "settings" && (
+            <Settings
+              globalSettings={launcher.globalSettings}
+              setGlobalSettings={launcher.setGlobalSettings}
+              themes={launcher.themes}
+              onApplyTheme={launcher.applyThemeToDom}
+              plugins={launcher.plugins}
+              setPlugins={launcher.setPlugins}
+              javaRuntimes={launcher.javaRuntimes}
+              setJavaRuntimes={launcher.setJavaRuntimes}
+              pluginBusLogs={pluginBus.busLogs}
+              language={language}
+              onToggleLanguage={handleToggleLanguage}
+            />
+          )}
+        </div>
+
+        {/* Unified Global Running & Launching Persistent Bottom Bar */}
+        {(launcher.launchingInstanceId ||
+          launcher.runningInstanceId ||
+          launcher.downloadProgress) && (
+          <div className="shrink-0 px-5 py-3 bg-bg-card/95 backdrop-blur border-t border-border-subtle shadow-2xl flex items-center justify-between gap-4 z-40">
+            {/* Left: Instance identity and state */}
+            <div className="flex items-center gap-3 min-w-0">
+              {launcher.runningInstanceId ? (
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-xl bg-accent-primary/20 border border-accent-primary/40 flex items-center justify-center shrink-0 text-accent-secondary">
+                  <Play className="w-4 h-4 fill-current animate-pulse" />
+                </div>
+              )}
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs text-text-primary truncate">
+                    {activeLaunchOrRunningInst?.name || "Minecraft"}
+                  </span>
+                  {activeLaunchOrRunningInst && (
+                    <span className="text-[10px] text-text-muted px-1.5 py-0.5 rounded bg-bg-elevated font-mono">
+                      {activeLaunchOrRunningInst.mcVersion} •{" "}
+                      {activeLaunchOrRunningInst.modloader}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-text-secondary truncate mt-0.5">
+                  {launcher.runningInstanceId
+                    ? language === "tr"
+                      ? "🟢 Oyun Çalışıyor (Minecraft Aktif)"
+                      : "🟢 Game is running (Minecraft active)"
+                    : launcher.downloadProgress?.stageText ||
+                      (language === "tr"
+                        ? "Aşama: Oyun hazırlanıyor ve başlatılıyor..."
+                        : "Stage: Preparing and launching game...")}
+                  {launcher.downloadProgress &&
+                    launcher.downloadProgress.totalFiles > 0 && (
+                      <span className="text-text-muted ml-1.5">
+                        ({launcher.downloadProgress.currentLabel} —{" "}
+                        {launcher.downloadProgress.completedFiles}/
+                        {launcher.downloadProgress.totalFiles})
+                      </span>
+                    )}
+                </div>
+              </div>
+            </div>
+
+            {/* Center: Progress bar if launching */}
+            {!launcher.runningInstanceId && launcher.downloadProgress && (
+              <div className="flex-1 max-w-xs flex items-center gap-2.5">
+                <div className="flex-1 h-2 rounded-full bg-bg-elevated overflow-hidden border border-border-subtle">
+                  <div
+                    className="h-full bg-accent-primary transition-all duration-150"
+                    style={{
+                      width: `${Math.round(
+                        launcher.downloadProgress.totalFiles > 0
+                          ? (launcher.downloadProgress.completedFiles /
+                              launcher.downloadProgress.totalFiles) *
+                              100
+                          : 0
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-xs font-semibold text-text-primary min-w-[36px] text-right font-mono">
+                  %
+                  {Math.round(
+                    launcher.downloadProgress.totalFiles > 0
+                      ? (launcher.downloadProgress.completedFiles /
+                          launcher.downloadProgress.totalFiles) *
+                          100
+                      : 0
+                  )}
+                </span>
+              </div>
+            )}
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 shrink-0">
+              {launcher.runningInstanceId ? (
+                <button
+                  onClick={handleGlobalStopRunningGame}
+                  className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
+                  title={
+                    language === "tr" ? "Oyunu zorla sonlandır" : "Force close game"
+                  }
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <span>
+                    {language === "tr" ? "Oyunu Kapat / Durdur" : "Stop Game"}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleGlobalCancelLaunch}
+                  className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 hover:text-white border border-red-500/30 text-xs font-semibold flex items-center gap-1.5 transition"
+                  title={language === "tr" ? "Açılışı iptal et" : "Cancel launch"}
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>{language === "tr" ? "İptal Et" : "Cancel"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {modModalInstance && (

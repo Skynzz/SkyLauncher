@@ -3,9 +3,11 @@ import {
   Check,
   Download,
   ExternalLink,
+  Minimize2,
   RefreshCw,
   Rocket,
   Sparkles,
+  Square,
 } from "lucide-react";
 import React, { useState } from "react";
 import type {
@@ -242,6 +244,59 @@ export const Settings: React.FC<SettingsProps> = ({
             </label>
           </div>
 
+          {/* Window Size Mode Presets (Small / Medium) */}
+          <div className="space-y-1.5 pt-1">
+            <label className="text-xs font-medium text-text-secondary">
+              {t.windowSizeModeLabel}
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const updated: GlobalSettings = {
+                    ...globalSettings,
+                    windowSizeMode: "small",
+                  };
+                  setGlobalSettings(updated);
+                  try {
+                    await invoke("set_window_size_mode", { mode: "small" });
+                    await invoke("save_global_settings", { settings: updated });
+                  } catch {}
+                }}
+                className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                  (globalSettings.windowSizeMode || "medium") === "small"
+                    ? "bg-accent-primary text-white border-accent-primary shadow-sm"
+                    : "bg-bg-secondary border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-elevated"
+                }`}
+              >
+                <Minimize2 className="w-3.5 h-3.5" />
+                <span>{t.windowSizeSmall}</span>
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const updated: GlobalSettings = {
+                    ...globalSettings,
+                    windowSizeMode: "medium",
+                  };
+                  setGlobalSettings(updated);
+                  try {
+                    await invoke("set_window_size_mode", { mode: "medium" });
+                    await invoke("save_global_settings", { settings: updated });
+                  } catch {}
+                }}
+                className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                  (globalSettings.windowSizeMode || "medium") === "medium"
+                    ? "bg-accent-primary text-white border-accent-primary shadow-sm"
+                    : "bg-bg-secondary border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-elevated"
+                }`}
+              >
+                <Square className="w-3.5 h-3.5" />
+                <span>{t.windowSizeMedium}</span>
+              </button>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between pt-2">
             {savedNotice ? (
               <span className="text-xs font-medium text-emerald-400 flex items-center gap-1">
@@ -259,9 +314,6 @@ export const Settings: React.FC<SettingsProps> = ({
             </button>
           </div>
         </form>
-
-        {/* Shared Mod Pool Hardlink Deduplicator Card */}
-        <ModPoolOptimizerCard label={t.optimizeModPoolBtn} language={language} />
 
         {/* Simplified Java Status Card */}
         <div className="p-5 rounded-2xl bg-bg-card border border-border-subtle space-y-3">
@@ -483,53 +535,6 @@ const GitHubUpdaterCard: React.FC<{
             </div>
           )}
         </div>
-      )}
-    </div>
-  );
-};
-
-const ModPoolOptimizerCard: React.FC<{ label: string; language: Language }> = ({
-  label,
-  language,
-}) => {
-  const [resultText, setResultText] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-
-  const handleOptimize = async () => {
-    setRunning(true);
-    setResultText(null);
-    try {
-      const rep = await invoke<{ deduplicatedFiles: number; savedBytes: number }>(
-        "optimize_mod_pool_cmd"
-      );
-      const mb = (rep.savedBytes / (1024 * 1024)).toFixed(1);
-      setResultText(
-        language === "tr"
-          ? `${rep.deduplicatedFiles} kopya mod birleştirildi (${mb} MB disk alanı kazanıldı).`
-          : `Deduplicated ${rep.deduplicatedFiles} mod files (${mb} MB saved).`
-      );
-    } catch (err) {
-      setResultText(String(err));
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  return (
-    <div className="p-5 rounded-2xl bg-bg-card border border-border-subtle flex flex-col gap-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-medium text-text-secondary">{label}</span>
-        <button
-          type="button"
-          disabled={running}
-          onClick={handleOptimize}
-          className="px-3.5 py-1.5 rounded-xl bg-bg-elevated hover:bg-accent-primary hover:text-white text-xs font-semibold text-text-primary transition"
-        >
-          {running ? "..." : language === "tr" ? "Optimize Et" : "Optimize"}
-        </button>
-      </div>
-      {resultText && (
-        <div className="text-xs text-emerald-400 font-medium">{resultText}</div>
       )}
     </div>
   );

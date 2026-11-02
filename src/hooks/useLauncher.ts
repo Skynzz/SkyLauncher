@@ -33,6 +33,7 @@ export interface GlobalSettings {
   curseforgeApiKey?: string | null;
   autoBackupWorlds?: boolean;
   githubUpdateRepo?: string;
+  windowSizeMode?: "small" | "medium";
 }
 
 export interface InstanceConfig {
@@ -307,19 +308,8 @@ export function useLauncher(callbacks?: {
   onGameCrash?: (report: CrashAnalysisReport) => void;
 }) {
   const [authStore, setAuthStore] = useState<AuthStore>({
-    activeProfileId: "b50ad385-829d-3141-a216-7e7d7539ba7f",
-    profiles: [
-      {
-        id: "b50ad385-829d-3141-a216-7e7d7539ba7f",
-        username: "Developer",
-        uuid: "b50ad385-829d-3141-a216-7e7d7539ba7f",
-        accessToken: "0",
-        userType: "legacy",
-        avatarColor: "#6366f1",
-        createdAt: new Date().toISOString(),
-        lastUsed: new Date().toISOString(),
-      },
-    ],
+    activeProfileId: null,
+    profiles: [],
   });
 
   const [instances, setInstances] = useState<InstanceConfig[]>([]);
@@ -331,10 +321,11 @@ export function useLauncher(callbacks?: {
     curseforgeInstancesDir: null,
     hideLauncherOnLaunch: false,
     language: "tr",
-    activeThemeId: "sky-slate",
+    activeThemeId: "midnight-zinc",
     curseforgeApiKey: null,
     autoBackupWorlds: true,
     githubUpdateRepo: "Skynzz/SkyLauncher",
+    windowSizeMode: "medium",
   });
 
   const [themes, setThemes] = useState<ThemeManifest[]>([]);

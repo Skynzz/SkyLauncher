@@ -33,9 +33,8 @@ use instance::pack_share::{
     base64_url_decode, clone_instance, create_world_backup, export_full_skypack,
     export_lightweight_skycode, export_server_pack, import_full_skypack,
     import_lightweight_skycode, list_instance_screenshots, list_instance_worlds,
-    list_world_backups, optimize_shared_mod_pool, restore_world_backup,
-    sync_options_txt_across_instances, ModPoolOptimizationReport, ScreenshotEntry,
-    SkyCodeExportResult, WorldBackupEntry, WorldSaveEntry,
+    list_world_backups, restore_world_backup, sync_options_txt_across_instances,
+    ScreenshotEntry, SkyCodeExportResult, WorldBackupEntry, WorldSaveEntry,
 };
 use instance::{GlobalSettings, InstanceConfig, InstanceManager, OFFICIAL_GITHUB_REPO};
 use notify::RecommendedWatcher;
@@ -650,13 +649,6 @@ async fn import_pack_from_bytes_cmd(
 }
 
 #[tauri::command]
-fn optimize_mod_pool_cmd(
-    state: State<'_, AppState>,
-) -> Result<ModPoolOptimizationReport, String> {
-    optimize_shared_mod_pool(&state.instance_manager)
-}
-
-#[tauri::command]
 async fn install_fps_boost_cmd(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -1248,6 +1240,24 @@ async fn install_app_update_cmd(
     Ok("Güncelleme tamamlandı, SkyLauncher yeniden başlatılıyor...".to_string())
 }
 
+#[tauri::command]
+fn set_window_size_mode(app_handle: AppHandle, mode: String) -> Result<String, String> {
+    if let Some(win) = app_handle.get_webview_window("main") {
+        let _ = win.unmaximize();
+        match mode.as_str() {
+            "small" => {
+                let _ = win.set_size(tauri::LogicalSize::new(1024, 640));
+                let _ = win.center();
+            }
+            _ => {
+                let _ = win.set_size(tauri::LogicalSize::new(1280, 768));
+                let _ = win.center();
+            }
+        }
+    }
+    Ok(mode)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     cleanup_old_executable();
@@ -1284,6 +1294,21 @@ pub fn run() {
         .setup(move |app| {
             let handle = app.handle().clone();
             let settings = instance_manager.load_global_settings().unwrap_or_default();
+
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unmaximize();
+                match settings.window_size_mode.as_str() {
+                    "small" => {
+                        let _ = win.set_size(tauri::LogicalSize::new(1024, 640));
+                        let _ = win.center();
+                    }
+                    _ => {
+                        let _ = win.set_size(tauri::LogicalSize::new(1280, 768));
+                        let _ = win.center();
+                    }
+                }
+            }
+
             let watcher = settings
                 .curseforge_instances_dir
                 .as_ref()
@@ -1339,7 +1364,6 @@ pub fn run() {
             export_skycode_cmd,
             import_skycode_cmd,
             import_pack_from_bytes_cmd,
-            optimize_mod_pool_cmd,
             install_fps_boost_cmd,
             install_lan_tunnel_cmd,
             apply_offline_skin_cmd,
@@ -1365,7 +1389,8 @@ pub fn run() {
             toggle_plugin,
             get_system_telemetry,
             check_app_update_cmd,
-            install_app_update_cmd
+            install_app_update_cmd,
+            set_window_size_mode
         ])
         .run(tauri::generate_context!())
         .expect("error while running SkyLauncher Tauri application");
